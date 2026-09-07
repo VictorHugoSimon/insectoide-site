@@ -3,18 +3,31 @@
 ## GitHub
 - [x] Repositório `VictorHugoSimon/insectoide-site`
 - [x] Branch principal `main`
-- [x] Baseline institucional publicada no repositório
-- [ ] Validar preview online
+- [x] Baseline institucional publicada
+- [x] SEO técnico, favicon e social card
+- [x] Headers e redirects para Cloudflare Pages
+
+## Backend de leads
+- [x] Pages Function `POST /api/leads`
+- [x] Validação server-side inicial
+- [x] Honeypot suportado no endpoint
+- [x] Schema D1 em `schema.sql`
+- [ ] Criar banco D1 exclusivo da Insectoide
+- [ ] Aplicar `schema.sql`
+- [ ] Vincular D1 ao Pages com binding `DB`
+- [ ] Conectar o formulário da Home ao endpoint
+- [ ] Smoke test de gravação do lead
 
 ## Cloudflare Pages
 - [ ] Criar projeto exclusivo da Insectoide
-- [ ] Conectar ao repositório `VictorHugoSimon/insectoide-site`
+- [ ] Importar `VictorHugoSimon/insectoide-site`
 - [ ] Framework preset: None
-- [ ] Build command: vazio
-- [ ] Build output directory: `/`
 - [ ] Production branch: `main`
-- [ ] Publicar preview
-- [ ] Fazer smoke test desktop/mobile
+- [ ] Build command: `exit 0`
+- [ ] Build output directory: `.`
+- [ ] Publicar primeiro deploy
+- [ ] Validar URL `*.pages.dev`
+- [ ] Smoke test desktop/mobile
 - [ ] Associar domínio somente após validação
 
 ## Conteúdo comercial
@@ -24,10 +37,11 @@
 - [ ] CNPJ / razão social
 - [ ] Validar cidades efetivamente atendidas
 
-## Formulário
-- [ ] Criar endpoint `POST /api/leads`
-- [ ] Validação server-side
-- [ ] Proteção anti-spam
-- [ ] Persistência em banco
-- [ ] Notificação para o comercial
-- [ ] Adequar consentimento e privacidade
+## Go-live
+- [ ] Revisar política de privacidade
+- [ ] Validar nome/marca INSECTOIDE
+- [ ] Confirmar domínio oficial
+- [ ] Configurar analytics
+- [ ] Configurar Search Console
+- [ ] Criar Google Perfil da Empresa
+- [ ] Publicar redes sociais oficiais
