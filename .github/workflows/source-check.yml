@@ -1,0 +1,43 @@
+name: Source Check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Validate project structure
+        run: node scripts/source-check.mjs
+
+      - name: Check Pages Functions syntax
+        shell: bash
+        run: |
+          node --input-type=module --check < functions/_middleware.js
+          node --input-type=module --check < functions/api/health.js
+          node --input-type=module --check < functions/api/leads.js
+
+      - name: Verify no unwanted icon libraries
+        shell: bash
+        run: |
+          ! grep -RniE "font-awesome|bootstrap-icons|lucide|heroicons" index.html functions || (echo "Biblioteca de ícones detectada" && exit 1)
+
+      - name: Verify D1 migration
+        shell: bash
+        run: |
+          grep -q "CREATE TABLE IF NOT EXISTS leads" migrations/0001_init.sql
+          grep -q "INSERT INTO leads" functions/api/leads.js
