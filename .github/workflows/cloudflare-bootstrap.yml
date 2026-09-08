@@ -1,6 +1,20 @@
 name: Bootstrap Cloudflare
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - 'index.html'
+      - 'privacidade.html'
+      - 'favicon.svg'
+      - 'social-card.svg'
+      - 'robots.txt'
+      - 'sitemap.xml'
+      - '_headers'
+      - '_redirects'
+      - 'functions/**'
+      - 'migrations/**'
+      - '.github/workflows/cloudflare-bootstrap.yml'
   workflow_dispatch:
 
 permissions:
@@ -19,28 +33,40 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Verificar credenciais sem expor valores
+        id: auth
+        shell: bash
+        run: |
+          set -euo pipefail
+          ready=true
+          if [ -z "${CLOUDFLARE_API_TOKEN:-}" ]; then
+            echo "::warning::Secret CLOUDFLARE_API_TOKEN ainda não configurado."
+            ready=false
+          fi
+          if [ -z "${CLOUDFLARE_ACCOUNT_ID:-}" ]; then
+            echo "::warning::Secret CLOUDFLARE_ACCOUNT_ID ainda não configurado."
+            ready=false
+          fi
+          echo "ready=$ready" >> "$GITHUB_OUTPUT"
+
+      - name: Aguardar configuração Cloudflare
+        if: steps.auth.outputs.ready != 'true'
+        run: |
+          echo "Bootstrap não executado porque os dois repository secrets da Cloudflare ainda não estão disponíveis."
+          echo "Nenhum recurso externo foi criado ou alterado."
+
       - name: Setup Node
+        if: steps.auth.outputs.ready == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: '20'
 
-      - name: Validar credenciais
-        shell: bash
-        run: |
-          set -euo pipefail
-          if [ -z "${CLOUDFLARE_API_TOKEN:-}" ]; then
-            echo "::error::Secret CLOUDFLARE_API_TOKEN não configurado."
-            exit 1
-          fi
-          if [ -z "${CLOUDFLARE_ACCOUNT_ID:-}" ]; then
-            echo "::error::Secret CLOUDFLARE_ACCOUNT_ID não configurado."
-            exit 1
-          fi
-
       - name: Instalar Wrangler
+        if: steps.auth.outputs.ready == 'true'
         run: npm install --no-save wrangler@4
 
-      - name: Garantir projeto Pages
+      - name: Garantir projeto Pages exclusivo
+        if: steps.auth.outputs.ready == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -51,7 +77,8 @@ jobs:
             npx wrangler pages project create "$PAGES_PROJECT" --production-branch main
           fi
 
-      - name: Garantir banco D1
+      - name: Garantir banco D1 exclusivo
+        if: steps.auth.outputs.ready == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -66,6 +93,7 @@ jobs:
           echo "DB_ID=$DB_ID" >> "$GITHUB_ENV"
 
       - name: Gerar configuração Wrangler em runtime
+        if: steps.auth.outputs.ready == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -82,15 +110,19 @@ jobs:
           EOF
 
       - name: Aplicar migrations D1
+        if: steps.auth.outputs.ready == 'true'
         run: npx wrangler d1 migrations apply "$D1_DATABASE" --remote --config wrangler.toml
 
       - name: Publicar Pages + Functions
+        if: steps.auth.outputs.ready == 'true'
         run: npx wrangler pages deploy . --project-name "$PAGES_PROJECT" --branch main --commit-hash "$GITHUB_SHA"
 
       - name: Listar deploy de produção
+        if: steps.auth.outputs.ready == 'true'
         run: npx wrangler pages deployment list --project-name "$PAGES_PROJECT" --environment production
 
       - name: Smoke test online
+        if: steps.auth.outputs.ready == 'true'
         shell: bash
         run: |
           set -euo pipefail
