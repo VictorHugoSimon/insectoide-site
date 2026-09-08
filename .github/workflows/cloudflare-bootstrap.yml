@@ -1,0 +1,114 @@
+name: Bootstrap Cloudflare
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+  CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+  PAGES_PROJECT: insectoide-site
+  D1_DATABASE: insectoide-db
+
+jobs:
+  bootstrap:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Validar credenciais
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${CLOUDFLARE_API_TOKEN:-}" ]; then
+            echo "::error::Secret CLOUDFLARE_API_TOKEN não configurado."
+            exit 1
+          fi
+          if [ -z "${CLOUDFLARE_ACCOUNT_ID:-}" ]; then
+            echo "::error::Secret CLOUDFLARE_ACCOUNT_ID não configurado."
+            exit 1
+          fi
+
+      - name: Instalar Wrangler
+        run: npm install --no-save wrangler@4
+
+      - name: Garantir projeto Pages
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx wrangler pages project list --json > /tmp/pages.json
+          if node -e "const fs=require('fs');const x=JSON.parse(fs.readFileSync('/tmp/pages.json','utf8'));process.exit(x.some(p=>p.name===process.env.PAGES_PROJECT)?0:1)"; then
+            echo "Pages $PAGES_PROJECT já existe."
+          else
+            npx wrangler pages project create "$PAGES_PROJECT" --production-branch main
+          fi
+
+      - name: Garantir banco D1
+        shell: bash
+        run: |
+          set -euo pipefail
+          if npx wrangler d1 info "$D1_DATABASE" --json > /tmp/d1.json 2>/dev/null; then
+            echo "D1 $D1_DATABASE já existe."
+          else
+            npx wrangler d1 create "$D1_DATABASE"
+            npx wrangler d1 info "$D1_DATABASE" --json > /tmp/d1.json
+          fi
+
+          DB_ID=$(node -e "const fs=require('fs');let x=JSON.parse(fs.readFileSync('/tmp/d1.json','utf8'));if(Array.isArray(x))x=x[0];const id=x.uuid||x.id||x.database_id;if(!id)process.exit(2);process.stdout.write(String(id));")
+          echo "DB_ID=$DB_ID" >> "$GITHUB_ENV"
+
+      - name: Gerar configuração Wrangler em runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > wrangler.toml <<EOF
+          name = "$PAGES_PROJECT"
+          pages_build_output_dir = "."
+          compatibility_date = "2026-09-08"
+
+          [[d1_databases]]
+          binding = "DB"
+          database_name = "$D1_DATABASE"
+          database_id = "$DB_ID"
+          migrations_dir = "migrations"
+          EOF
+
+      - name: Aplicar migrations D1
+        run: npx wrangler d1 migrations apply "$D1_DATABASE" --remote --config wrangler.toml
+
+      - name: Publicar Pages + Functions
+        run: npx wrangler pages deploy . --project-name "$PAGES_PROJECT" --branch main --commit-hash "$GITHUB_SHA"
+
+      - name: Listar deploy de produção
+        run: npx wrangler pages deployment list --project-name "$PAGES_PROJECT" --environment production
+
+      - name: Smoke test online
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE_URL="https://${PAGES_PROJECT}.pages.dev"
+          ok=0
+          for i in $(seq 1 12); do
+            if curl -fsS "$BASE_URL/api/health" > /tmp/health.json; then
+              ok=1
+              break
+            fi
+            sleep 5
+          done
+          if [ "$ok" -ne 1 ]; then
+            echo "::error::Health check não respondeu em $BASE_URL/api/health"
+            exit 1
+          fi
+          cat /tmp/health.json
+          node -e "const fs=require('fs');const x=JSON.parse(fs.readFileSync('/tmp/health.json','utf8'));if(!x.ok||!x.database_configured){console.error(x);process.exit(1)}"
+          curl -fsS "$BASE_URL/" > /dev/null
+          curl -fsS "$BASE_URL/api/leads" > /dev/null
+          echo "Cloudflare bootstrap aprovado: $BASE_URL"
